@@ -1,5 +1,5 @@
 use crate::core::WidgetId;
-use crate::layout::{Constraints, Point, Size};
+use crate::layout::{Constraints, Point, Rect, Size};
 
 /// Base trait for all UI widgets in the lath framework.
 ///
@@ -44,6 +44,15 @@ pub trait Widget<M> {
     fn arrange(&self, _size: Size, _arena: &dyn WidgetMeasure<M>) -> Vec<(WidgetId, Point)> {
         Vec::new()
     }
+
+    // -- Drawing ------------------------------------------------------------
+
+    /// Draws the widget's visual representation onto `canvas`.
+    ///
+    /// `rect` is the final absolute screen-space boundary computed by the
+    /// layout solver.  Implementations should clip and paint within this
+    /// rectangle.
+    fn draw(&self, canvas: &mut tiny_skia::PixmapMut, rect: Rect);
 }
 
 /// Minimal read-only view of the arena that layout hooks may use to

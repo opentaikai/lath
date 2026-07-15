@@ -274,6 +274,8 @@ mod tests {
         fn arrange(&self, _size: Size, _arena: &dyn WidgetMeasure<String>) -> Vec<(WidgetId, Point)> {
             Vec::new()
         }
+
+        fn draw(&self, _canvas: &mut tiny_skia::PixmapMut, _rect: Rect) {}
     }
 
     /// A container that stacks children vertically, each at full parent width.
@@ -335,6 +337,8 @@ mod tests {
 
             offsets
         }
+
+        fn draw(&self, _canvas: &mut tiny_skia::PixmapMut, _rect: Rect) {}
     }
 
     // -- Tests --------------------------------------------------------------
