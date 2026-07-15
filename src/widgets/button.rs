@@ -2,7 +2,7 @@ use tiny_skia::Color;
 
 use crate::core::WidgetId;
 use crate::layout::{Constraints, Point, Rect, Size};
-use crate::widget::{Widget, WidgetMeasure};
+use crate::widget::{EventCtx, Widget, WidgetEvent, WidgetMeasure};
 
 /// An interactive container that wraps a single child and optionally
 /// produces a message `M` when clicked.
@@ -75,7 +75,7 @@ where
     }
 }
 
-impl<M> Widget<M> for Button<M> {
+impl<M: Clone> Widget<M> for Button<M> {
     fn name(&self) -> &'static str {
         "Button"
     }
@@ -142,6 +142,16 @@ impl<M> Widget<M> for Button<M> {
 
         // Note: child drawing is handled by the render traversal, not here.
         // The button only draws its own background; the child draws itself.
+    }
+
+    // -- Interaction --------------------------------------------------------
+
+    fn handle_event(&self, event: WidgetEvent, ctx: &EventCtx<M>) {
+        if let WidgetEvent::Click = event {
+            if let Some(msg) = &self.on_click {
+                ctx.emit(msg.clone());
+            }
+        }
     }
 }
 

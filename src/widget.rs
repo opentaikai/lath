@@ -1,5 +1,44 @@
+use std::sync::mpsc::Sender;
+
 use crate::core::WidgetId;
 use crate::layout::{Constraints, Point, Rect, Size};
+
+// ---------------------------------------------------------------------------
+// WidgetEvent
+// ---------------------------------------------------------------------------
+
+/// Internal enum representing low-level interaction events that can be
+/// dispatched to widgets via [`Widget::handle_event`].
+#[derive(Debug, Clone, Copy)]
+pub enum WidgetEvent {
+    /// A mouse click (press + release) occurred within the widget bounds.
+    Click,
+    /// The cursor entered the widget bounds.
+    MouseEnter,
+    /// The cursor left the widget bounds.
+    MouseLeave,
+}
+
+// ---------------------------------------------------------------------------
+// EventCtx
+// ---------------------------------------------------------------------------
+
+/// Context passed to [`Widget::handle_event`] allowing the widget to
+/// emit application-level messages `M` into the event channel.
+pub struct EventCtx<M> {
+    pub(crate) tx: Sender<M>,
+}
+
+impl<M> EventCtx<M> {
+    /// Pushes a message into the channel for the application main loop.
+    pub fn emit(&self, message: M) {
+        let _ = self.tx.send(message);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Widget trait
+// ---------------------------------------------------------------------------
 
 /// Base trait for all UI widgets in the lath framework.
 ///
@@ -53,6 +92,15 @@ pub trait Widget<M> {
     /// layout solver.  Implementations should clip and paint within this
     /// rectangle.
     fn draw(&self, canvas: &mut tiny_skia::PixmapMut, rect: Rect);
+
+    // -- Interaction --------------------------------------------------------
+
+    /// Handles an interaction event.  If the widget wishes to trigger a
+    /// message, it uses the provided [`EventCtx`] to emit its stored `M`
+    /// value.
+    ///
+    /// The default implementation is a no-op (non-interactive widgets).
+    fn handle_event(&self, _event: WidgetEvent, _ctx: &EventCtx<M>) {}
 }
 
 /// Minimal read-only view of the arena that layout hooks may use to
