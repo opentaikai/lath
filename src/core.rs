@@ -167,6 +167,8 @@ mod tests {
         fn add_child(&mut self, child: WidgetId) {
             self.children.push(child);
         }
+
+        fn draw(&self, _canvas: &mut tiny_skia::PixmapMut, _rect: crate::layout::Rect) {}
     }
 
     struct Container {
@@ -195,6 +197,8 @@ mod tests {
         fn add_child(&mut self, child: WidgetId) {
             self.children.push(child);
         }
+
+        fn draw(&self, _canvas: &mut tiny_skia::PixmapMut, _rect: crate::layout::Rect) {}
     }
 
     // -- Tests -------------------------------------------------------------
