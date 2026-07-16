@@ -146,12 +146,14 @@ impl<M: Clone> Widget<M> for Button<M> {
 
     // -- Interaction --------------------------------------------------------
 
-    fn handle_event(&self, event: WidgetEvent, ctx: &EventCtx<M>) {
+    fn handle_event(&self, event: WidgetEvent, ctx: &EventCtx<M>) -> bool {
         if let WidgetEvent::Click = event {
             if let Some(msg) = &self.on_click {
                 ctx.emit(msg.clone());
+                return true;
             }
         }
+        false
     }
 }
 
