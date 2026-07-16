@@ -81,6 +81,7 @@ impl<M> Widget<M> for Label {
         let scaled_font = font.as_scaled(scale);
 
         // Pre-multiply the text colour for alpha blending.
+        // PremultipliedColor values are f32 in 0.0..=1.0 range.
         let src_premul = self.text_color.premultiply();
         let sr = src_premul.red();
         let sg = src_premul.green();
@@ -125,23 +126,22 @@ impl<M> Widget<M> for Label {
                         let dst = &mut pixels[idx];
 
                         // Alpha-blend the glyph onto the existing pixel.
-                        let dst_r = dst.red() as f32;
-                        let dst_g = dst.green() as f32;
-                        let dst_b = dst.blue() as f32;
-                        let dst_a = dst.alpha() as f32;
+                        // All values are in 0.0..=1.0 range.
+                        let inv_sa = 1.0 - sa;
 
-                        let src_a = sa * coverage;
-                        let inv = 1.0 - src_a;
+                        let out_r = (sr * coverage + dst.red() as f32 / 255.0 * inv_sa).min(1.0);
+                        let out_g = (sg * coverage + dst.green() as f32 / 255.0 * inv_sa).min(1.0);
+                        let out_b = (sb * coverage + dst.blue() as f32 / 255.0 * inv_sa).min(1.0);
+                        let out_a = (sa * coverage + dst.alpha() as f32 / 255.0 * inv_sa).min(1.0);
 
-                        let out_r = (sr * coverage + dst_r * inv).min(255.0) as u8;
-                        let out_g = (sg * coverage + dst_g * inv).min(255.0) as u8;
-                        let out_b = (sb * coverage + dst_b * inv).min(255.0) as u8;
-                        let out_a = (sa * coverage + dst_a * inv).min(255.0) as u8;
+                        // Convert back to premultiplied u8.
+                        let or = (out_r * 255.0) as u8;
+                        let og = (out_g * 255.0) as u8;
+                        let ob = (out_b * 255.0) as u8;
+                        let oa = (out_a * 255.0) as u8;
 
-                        *dst = tiny_skia::PremultipliedColorU8::from_rgba(
-                            out_r, out_g, out_b, out_a,
-                        )
-                        .unwrap_or(*dst);
+                        *dst = tiny_skia::PremultipliedColorU8::from_rgba(or, og, ob, oa)
+                            .unwrap_or(*dst);
                     }
                 });
             }
