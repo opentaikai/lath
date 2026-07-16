@@ -82,7 +82,7 @@ impl WindowShell {
             surface: None,
             rgba_buffer: Vec::new(),
             cursor_position: (0.0, 0.0),
-            event_handler: Some(event_handler),
+            event_handler,
         };
 
         event_loop.run_app(&mut app)?;
@@ -103,7 +103,7 @@ struct ShellApp<F> {
     surface: Option<Surface<Arc<Window>, Arc<Window>>>,
     rgba_buffer: Vec<u8>,
     cursor_position: (f64, f64),
-    event_handler: Option<F>,
+    event_handler: F,
 }
 
 impl<F> ShellApp<F> {
@@ -128,8 +128,6 @@ impl<F> ShellApp<F> {
     fn present_frame(
         surface: &mut Surface<Arc<Window>, Arc<Window>>,
         rgba_buffer: &[u8],
-        _width: u32,
-        _height: u32,
     ) {
         let Ok(mut buffer) = surface.buffer_mut() else {
             return;
@@ -166,15 +164,21 @@ where
             .with_title(&self.title)
             .with_inner_size(PhysicalSize::new(self.width, self.height));
 
-        let window = Arc::new(event_loop.create_window(attrs).unwrap());
-        let context = Context::new(window.clone()).unwrap();
-        let mut surface = Surface::new(&context, window.clone()).unwrap();
+        let window = Arc::new(
+            event_loop
+                .create_window(attrs)
+                .expect("failed to create window"),
+        );
+        let context =
+            Context::new(window.clone()).expect("failed to create softbuffer context");
+        let mut surface =
+            Surface::new(&context, window.clone()).expect("failed to create softbuffer surface");
         surface
             .resize(
-                NonZeroU32::new(self.width).unwrap(),
-                NonZeroU32::new(self.height).unwrap(),
+                NonZeroU32::new(self.width).expect("window width must be > 0"),
+                NonZeroU32::new(self.height).expect("window height must be > 0"),
             )
-            .unwrap();
+            .expect("failed to resize softbuffer surface");
 
         self.rgba_buffer
             .resize((self.width * self.height * 4) as usize, 0);
@@ -190,7 +194,7 @@ where
         _window_id: WindowId,
         event: WindowEvent,
     ) {
-        let Some(window) = self.window.clone() else {
+        let Some(window) = self.window.as_ref() else {
             return;
         };
 
@@ -214,7 +218,7 @@ where
                     .resize((self.width * self.height * 4) as usize, 0);
 
                 Self::dispatch(
-                    self.event_handler.as_mut().unwrap(),
+                    &mut self.event_handler,
                     ShellEvent::Resized {
                         width: self.width,
                         height: self.height,
@@ -222,7 +226,7 @@ where
                     &mut self.rgba_buffer,
                     self.width,
                     self.height,
-                    &window,
+                    window,
                 );
 
                 window.request_redraw();
@@ -243,22 +247,17 @@ where
 
                 // Let the user draw on the canvas.
                 Self::dispatch(
-                    self.event_handler.as_mut().unwrap(),
+                    &mut self.event_handler,
                     ShellEvent::Redraw,
                     &mut self.rgba_buffer,
                     self.width,
                     self.height,
-                    &window,
+                    window,
                 );
 
                 // Convert RGBA → softbuffer and present.
                 if let Some(surface) = &mut self.surface {
-                    Self::present_frame(
-                        surface,
-                        &self.rgba_buffer,
-                        self.width,
-                        self.height,
-                    );
+                    Self::present_frame(surface, &self.rgba_buffer);
                 }
             }
 
@@ -267,7 +266,7 @@ where
                 self.cursor_position = (position.x, position.y);
 
                 Self::dispatch(
-                    self.event_handler.as_mut().unwrap(),
+                    &mut self.event_handler,
                     ShellEvent::CursorMoved {
                         x: position.x,
                         y: position.y,
@@ -275,7 +274,7 @@ where
                     &mut self.rgba_buffer,
                     self.width,
                     self.height,
-                    &window,
+                    window,
                 );
             }
 
@@ -301,12 +300,12 @@ where
                 };
 
                 Self::dispatch(
-                    self.event_handler.as_mut().unwrap(),
+                    &mut self.event_handler,
                     shell_event,
                     &mut self.rgba_buffer,
                     self.width,
                     self.height,
-                    &window,
+                    window,
                 );
 
                 // Request a redraw so the user closure can react to input

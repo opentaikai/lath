@@ -63,7 +63,7 @@ impl<M> Widget<M> for Label {
     fn measure(&self, constraints: Constraints, _arena: &dyn WidgetMeasure<M>) -> Size {
         // Approximate monospace glyph width: ~60% of font_size.
         let char_width = self.font_size * 0.6;
-        let width = self.text.len() as f32 * char_width;
+        let width = self.text.chars().count() as f32 * char_width;
         let height = self.font_size;
 
         constraints.constrain(Size { width, height })
@@ -81,7 +81,7 @@ impl<M> Widget<M> for Label {
         let scaled_font = font.as_scaled(scale);
 
         // Pre-multiply the text colour for alpha blending.
-        // PremultipliedColor values are f32 in 0.0..=1.0 range.
+        // All values are in 0.0..=1.0 range.
         let src_premul = self.text_color.premultiply();
         let sr = src_premul.red();
         let sg = src_premul.green();
@@ -125,19 +125,26 @@ impl<M> Widget<M> for Label {
                         let idx = (y as u32 * canvas_w + x as u32) as usize;
                         let dst = &mut pixels[idx];
 
-                        // Alpha-blend the glyph onto the existing pixel.
-                        // Standard premultiplied alpha compositing:
-                        //   out = src + dst * (1 - src_a)
-                        // All values are in 0.0..=1.0 range.
+                        // Porter-Duff "over" compositing.
+                        // The .min(1.0) cap is critical: it ensures out_r <= out_a
+                        // (the premultiplied invariant), otherwise from_rgba()
+                        // returns None and the glyph pixel is silently dropped.
                         let src_a = sa * coverage;
                         let inv_src_a = 1.0 - src_a;
 
-                        let out_r = (sr * coverage + dst.red() as f32 / 255.0 * inv_src_a).min(1.0);
-                        let out_g = (sg * coverage + dst.green() as f32 / 255.0 * inv_src_a).min(1.0);
-                        let out_b = (sb * coverage + dst.blue() as f32 / 255.0 * inv_src_a).min(1.0);
-                        let out_a = (src_a + dst.alpha() as f32 / 255.0 * inv_src_a).min(1.0);
+                        let out_r = (sr * coverage
+                            + dst.red() as f32 / 255.0 * inv_src_a)
+                            .min(1.0);
+                        let out_g = (sg * coverage
+                            + dst.green() as f32 / 255.0 * inv_src_a)
+                            .min(1.0);
+                        let out_b = (sb * coverage
+                            + dst.blue() as f32 / 255.0 * inv_src_a)
+                            .min(1.0);
+                        let out_a = (src_a
+                            + dst.alpha() as f32 / 255.0 * inv_src_a)
+                            .min(1.0);
 
-                        // Convert back to premultiplied u8.
                         let or = (out_r * 255.0) as u8;
                         let og = (out_g * 255.0) as u8;
                         let ob = (out_b * 255.0) as u8;
