@@ -80,14 +80,13 @@ impl<M> Widget<M> for Label {
         let scale = fonts::scale(self.font_size);
         let scaled_font = font.as_scaled(scale);
 
-        // Pre-multiply the text colour and scale to 0–255 range once.
-        // All per-pixel blending uses u16 integer math — no floats in the
-        // hot path.
+        // Pre-multiply the text colour for alpha blending.
+        // All values are in 0.0..=1.0 range.
         let src_premul = self.text_color.premultiply();
-        let src_r = (src_premul.red() * 255.0) as u16;
-        let src_g = (src_premul.green() * 255.0) as u16;
-        let src_b = (src_premul.blue() * 255.0) as u16;
-        let src_a = (src_premul.alpha() * 255.0) as u16;
+        let sr = src_premul.red();
+        let sg = src_premul.green();
+        let sb = src_premul.blue();
+        let sa = src_premul.alpha();
 
         let canvas_w = canvas.width();
         let canvas_h = canvas.height();
@@ -126,21 +125,30 @@ impl<M> Widget<M> for Label {
                         let idx = (y as u32 * canvas_w + x as u32) as usize;
                         let dst = &mut pixels[idx];
 
-                        // Porter-Duff "over" with integer math.
-                        // coverage ∈ [0, 255], src_a ∈ [0, 255]
-                        let cov = (coverage * 255.0) as u16;
-                        let eff_a = (src_a as u32 * cov as u32 / 255) as u16;
-                        let inv_a = 255 - eff_a;
+                        // Porter-Duff "over" compositing.
+                        // The .min(1.0) cap is critical: it ensures out_r <= out_a
+                        // (the premultiplied invariant), otherwise from_rgba()
+                        // returns None and the glyph pixel is silently dropped.
+                        let src_a = sa * coverage;
+                        let inv_src_a = 1.0 - src_a;
 
-                        let dst_r = dst.red() as u32;
-                        let dst_g = dst.green() as u32;
-                        let dst_b = dst.blue() as u32;
-                        let dst_a = dst.alpha() as u32;
+                        let out_r = (sr * coverage
+                            + dst.red() as f32 / 255.0 * inv_src_a)
+                            .min(1.0);
+                        let out_g = (sg * coverage
+                            + dst.green() as f32 / 255.0 * inv_src_a)
+                            .min(1.0);
+                        let out_b = (sb * coverage
+                            + dst.blue() as f32 / 255.0 * inv_src_a)
+                            .min(1.0);
+                        let out_a = (src_a
+                            + dst.alpha() as f32 / 255.0 * inv_src_a)
+                            .min(1.0);
 
-                        let or = ((src_r as u32 * cov as u32 + dst_r * inv_a as u32) / 255) as u8;
-                        let og = ((src_g as u32 * cov as u32 + dst_g * inv_a as u32) / 255) as u8;
-                        let ob = ((src_b as u32 * cov as u32 + dst_b * inv_a as u32) / 255) as u8;
-                        let oa = ((eff_a as u32 + dst_a * inv_a as u32) / 255) as u8;
+                        let or = (out_r * 255.0) as u8;
+                        let og = (out_g * 255.0) as u8;
+                        let ob = (out_b * 255.0) as u8;
+                        let oa = (out_a * 255.0) as u8;
 
                         *dst = tiny_skia::PremultipliedColorU8::from_rgba(or, og, ob, oa)
                             .unwrap_or(*dst);
