@@ -597,6 +597,7 @@ dependencies = [
 name = "lath"
 version = "0.1.0"
 dependencies = [
+ "ab_glyph",
  "bytemuck",
  "softbuffer",
  "tiny-skia 0.12.0",

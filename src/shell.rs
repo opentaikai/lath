@@ -308,6 +308,10 @@ where
                     self.height,
                     &window,
                 );
+
+                // Request a redraw so the user closure can react to input
+                // (e.g. update counter state and re-render).
+                window.request_redraw();
             }
 
             _ => {}

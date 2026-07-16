@@ -1,6 +1,8 @@
+use ab_glyph::{Font, ScaleFont};
 use tiny_skia::Color;
 
 use crate::core::WidgetId;
+use crate::fonts;
 use crate::layout::{Constraints, Point, Rect, Size};
 use crate::widget::{Widget, WidgetMeasure};
 
@@ -11,9 +13,8 @@ use crate::widget::{Widget, WidgetMeasure};
 /// * **measure** – approximates the text bounding box:
 ///   `width = char_count × font_size × 0.6`, `height = font_size`.
 /// * **arrange** – leaf node, returns nothing.
-/// * **draw** – renders a coloured rectangle representing the text
-///   bounding box.  (Full glyph rendering will replace this once a
-///   font rasteriser is integrated.)
+/// * **draw** – rasterises each glyph with `ab_glyph` and paints
+///   the resulting coverage mask onto the `tiny-skia` canvas.
 pub struct Label {
     text: String,
     text_color: Color,
@@ -75,19 +76,78 @@ impl<M> Widget<M> for Label {
     // -- Drawing ------------------------------------------------------------
 
     fn draw(&self, canvas: &mut tiny_skia::PixmapMut, rect: Rect) {
-        // MVP: draw a filled rectangle in the text colour to represent the
-        // text bounding box.  A future integration with ab_glyph / cosmic-text
-        // will replace this with actual glyph rasterisation.
-        let mut paint = tiny_skia::Paint::default();
-        paint.set_color(self.text_color);
+        let font = fonts::default_font();
+        let scale = fonts::scale(self.font_size);
+        let scaled_font = font.as_scaled(scale);
 
-        if let Some(r) = tiny_skia::Rect::from_xywh(
-            rect.origin.x,
-            rect.origin.y,
-            rect.size.width,
-            rect.size.height,
-        ) {
-            canvas.fill_rect(r, &paint, tiny_skia::Transform::identity(), None);
+        // Pre-multiply the text colour for alpha blending.
+        // PremultipliedColor values are f32 in 0.0..=1.0 range.
+        let src_premul = self.text_color.premultiply();
+        let sr = src_premul.red();
+        let sg = src_premul.green();
+        let sb = src_premul.blue();
+        let sa = src_premul.alpha();
+
+        let canvas_w = canvas.width();
+        let canvas_h = canvas.height();
+        let pixels = canvas.pixels_mut();
+
+        // Starting x position (left edge of the rect).
+        let mut cursor_x = rect.origin.x;
+
+        for code_point in self.text.chars() {
+            let glyph_id = font.glyph_id(code_point);
+
+            // Advance cursor by the glyph's advance width.
+            let advance = scaled_font.h_advance(glyph_id);
+            cursor_x += advance;
+
+            // Create a Glyph with scale for outline lookup.
+            let glyph = glyph_id.with_scale(self.font_size);
+
+            // Rasterise the glyph and paint coverage samples.
+            if let Some(outlined) = font.outline_glyph(glyph) {
+                let bounds = outlined.px_bounds();
+
+                // Glyph origin in canvas coordinates.
+                let gx = cursor_x + bounds.min.x;
+                let gy = rect.origin.y + (scaled_font.ascent() + bounds.min.y);
+
+                outlined.draw(|px, py, coverage| {
+                    let x = gx + px as f32;
+                    let y = gy + py as f32;
+
+                    if x >= 0.0
+                        && y >= 0.0
+                        && (x as u32) < canvas_w
+                        && (y as u32) < canvas_h
+                    {
+                        let idx = (y as u32 * canvas_w + x as u32) as usize;
+                        let dst = &mut pixels[idx];
+
+                        // Alpha-blend the glyph onto the existing pixel.
+                        // Standard premultiplied alpha compositing:
+                        //   out = src + dst * (1 - src_a)
+                        // All values are in 0.0..=1.0 range.
+                        let src_a = sa * coverage;
+                        let inv_src_a = 1.0 - src_a;
+
+                        let out_r = (sr * coverage + dst.red() as f32 / 255.0 * inv_src_a).min(1.0);
+                        let out_g = (sg * coverage + dst.green() as f32 / 255.0 * inv_src_a).min(1.0);
+                        let out_b = (sb * coverage + dst.blue() as f32 / 255.0 * inv_src_a).min(1.0);
+                        let out_a = (src_a + dst.alpha() as f32 / 255.0 * inv_src_a).min(1.0);
+
+                        // Convert back to premultiplied u8.
+                        let or = (out_r * 255.0) as u8;
+                        let og = (out_g * 255.0) as u8;
+                        let ob = (out_b * 255.0) as u8;
+                        let oa = (out_a * 255.0) as u8;
+
+                        *dst = tiny_skia::PremultipliedColorU8::from_rgba(or, og, ob, oa)
+                            .unwrap_or(*dst);
+                    }
+                });
+            }
         }
     }
 }
