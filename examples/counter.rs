@@ -37,7 +37,7 @@ fn rebuild_tree(ui: &mut UiContext<Msg>, count: u32) {
     // Leaf: displays the current count.
     let count_label = ui.arena.spawn(
         Label::new(format!("Count: {count}"))
-            .text_color(Color::from_rgba8(0xFF, 0xFF, 0xFF, 0xFF))
+            .text_color(Color::from_rgba8(0x00, 0x00, 0x00, 0xFF))
             .font_size(24.0),
     );
 
