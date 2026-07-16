@@ -99,8 +99,13 @@ pub trait Widget<M> {
     /// message, it uses the provided [`EventCtx`] to emit its stored `M`
     /// value.
     ///
-    /// The default implementation is a no-op (non-interactive widgets).
-    fn handle_event(&self, _event: WidgetEvent, _ctx: &EventCtx<M>) {}
+    /// Returns `true` if the event was consumed (stopping propagation),
+    /// or `false` to let the hit-test continue to ancestor widgets.
+    ///
+    /// The default implementation returns `false` (non-interactive widgets).
+    fn handle_event(&self, _event: WidgetEvent, _ctx: &EventCtx<M>) -> bool {
+        false
+    }
 }
 
 /// Minimal read-only view of the arena that layout hooks may use to
