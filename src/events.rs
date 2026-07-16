@@ -49,8 +49,9 @@ fn hit_test_recursive<M>(
 
     // Check whether the click falls inside this widget's bounds.
     if let Some(rect) = layout.get(id) {
-        if point_in_rect(click_pos, rect) {
-            widget.handle_event(WidgetEvent::Click, event_ctx);
+        if point_in_rect(click_pos, rect)
+            && widget.handle_event(WidgetEvent::Click, event_ctx)
+        {
             return true;
         }
     }
