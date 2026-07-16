@@ -126,13 +126,16 @@ impl<M> Widget<M> for Label {
                         let dst = &mut pixels[idx];
 
                         // Alpha-blend the glyph onto the existing pixel.
+                        // Standard premultiplied alpha compositing:
+                        //   out = src + dst * (1 - src_a)
                         // All values are in 0.0..=1.0 range.
-                        let inv_sa = 1.0 - sa;
+                        let src_a = sa * coverage;
+                        let inv_src_a = 1.0 - src_a;
 
-                        let out_r = (sr * coverage + dst.red() as f32 / 255.0 * inv_sa).min(1.0);
-                        let out_g = (sg * coverage + dst.green() as f32 / 255.0 * inv_sa).min(1.0);
-                        let out_b = (sb * coverage + dst.blue() as f32 / 255.0 * inv_sa).min(1.0);
-                        let out_a = (sa * coverage + dst.alpha() as f32 / 255.0 * inv_sa).min(1.0);
+                        let out_r = (sr * coverage + dst.red() as f32 / 255.0 * inv_src_a).min(1.0);
+                        let out_g = (sg * coverage + dst.green() as f32 / 255.0 * inv_src_a).min(1.0);
+                        let out_b = (sb * coverage + dst.blue() as f32 / 255.0 * inv_src_a).min(1.0);
+                        let out_a = (src_a + dst.alpha() as f32 / 255.0 * inv_src_a).min(1.0);
 
                         // Convert back to premultiplied u8.
                         let or = (out_r * 255.0) as u8;
