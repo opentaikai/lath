@@ -166,6 +166,7 @@ mod tests {
     use crate::core::UiArena;
     use crate::layout::compute_layout;
     use crate::widgets::Label;
+    use ab_glyph::{Font, ScaleFont};
 
     #[test]
     fn button_measures_child_with_padding() {
@@ -185,10 +186,18 @@ mod tests {
         );
 
         let btn_rect = state.get(btn).expect("button frame");
-        // Label "OK" = 2 × 16 × 0.6 = 19.2, height 16.0
-        // With padding 12: 19.2 + 24 = 43.2, 16.0 + 24 = 40.0
-        assert!((btn_rect.size.width - 43.2).abs() < f32::EPSILON);
-        assert!((btn_rect.size.height - 40.0).abs() < f32::EPSILON);
+        // Label "OK" uses the variable-width DejaVu Sans font.
+        // Compute the exact expected width using the font's advance metrics,
+        // then add padding on both sides.
+        let font = crate::fonts::default_font();
+        let scaled = font.as_scaled(crate::fonts::scale(16.0));
+        let ok_w: f32 = "OK"
+            .chars()
+            .map(|c| scaled.h_advance(font.glyph_id(c)))
+            .sum();
+        let eh = scaled.height();
+        assert!((btn_rect.size.width - (ok_w + 24.0)).abs() < 0.01);
+        assert!((btn_rect.size.height - (eh + 24.0)).abs() < 0.01);
 
         let label_rect = state.get(label).expect("label frame");
         assert_eq!(label_rect.origin, Point { x: 12.0, y: 12.0 });

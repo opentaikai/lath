@@ -6,15 +6,17 @@ use crate::fonts;
 use crate::layout::{Constraints, Point, Rect, Size};
 use crate::widget::{Widget, WidgetMeasure};
 
-/// A static, single-line text renderer.
+/// A single-line text label with exact font-metric measurement
+/// and glyph-by-glyph rasterization.
 ///
 /// # Layout
 ///
-/// * **measure** – approximates the text bounding box:
-///   `width = char_count × font_size × 0.6`, `height = font_size`.
+/// * **measure** – uses `ab_glyph` to sum per-glyph horizontal advance
+///   widths for exact text width; height is the font's full line height
+///   (`ascent - descent + line_gap`).
 /// * **arrange** – leaf node, returns nothing.
-/// * **draw** – rasterises each glyph with `ab_glyph` and paints
-///   the resulting coverage mask onto the `tiny-skia` canvas.
+/// * **draw** – rasterises each glyph via `ab_glyph::outline_glyph` and
+///   blends coverage samples onto the `tiny-skia` canvas.
 pub struct Label {
     text: String,
     text_color: Color,
@@ -49,6 +51,10 @@ impl Label {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Widget impl
+// ---------------------------------------------------------------------------
+
 impl<M> Widget<M> for Label {
     fn name(&self) -> &'static str {
         "Label"
@@ -61,10 +67,16 @@ impl<M> Widget<M> for Label {
     // -- Layout -------------------------------------------------------------
 
     fn measure(&self, constraints: Constraints, _arena: &dyn WidgetMeasure<M>) -> Size {
-        // Approximate monospace glyph width: ~60% of font_size.
-        let char_width = self.font_size * 0.6;
-        let width = self.text.chars().count() as f32 * char_width;
-        let height = self.font_size;
+        let font = fonts::default_font();
+        let scale = fonts::scale(self.font_size);
+        let scaled = font.as_scaled(scale);
+
+        let width: f32 = self
+            .text
+            .chars()
+            .map(|c| scaled.h_advance(font.glyph_id(c)))
+            .sum();
+        let height = scaled.height();
 
         constraints.constrain(Size { width, height })
     }
@@ -78,10 +90,9 @@ impl<M> Widget<M> for Label {
     fn draw(&self, canvas: &mut tiny_skia::PixmapMut, rect: Rect) {
         let font = fonts::default_font();
         let scale = fonts::scale(self.font_size);
-        let scaled_font = font.as_scaled(scale);
+        let scaled = font.as_scaled(scale);
 
-        // Pre-multiply the text colour for alpha blending.
-        // All values are in 0.0..=1.0 range.
+        // Pre-multiplied source colour (used inside the coverage loop).
         let src_premul = self.text_color.premultiply();
         let sr = src_premul.red();
         let sg = src_premul.green();
@@ -92,39 +103,33 @@ impl<M> Widget<M> for Label {
         let canvas_h = canvas.height();
         let pixels = canvas.pixels_mut();
 
-        // Starting x position (left edge of the rect).
+        // Baseline: the layout rect's top-edge + ascent (ascent is positive).
+        let baseline_y = rect.origin.y + scaled.ascent();
         let mut cursor_x = rect.origin.x;
 
         for code_point in self.text.chars() {
             let glyph_id = font.glyph_id(code_point);
+            let advance = scaled.h_advance(glyph_id);
 
-            // Advance cursor by the glyph's advance width.
-            let advance = scaled_font.h_advance(glyph_id);
+            // Position the glyph at the current cursor on the baseline,
+            // then advance the cursor for the next glyph.
+            let origin_x = cursor_x;
             cursor_x += advance;
 
-            // Create a Glyph with scale for outline lookup.
-            let glyph = glyph_id.with_scale(self.font_size);
+            let glyph =
+                glyph_id.with_scale_and_position(scale, ab_glyph::point(origin_x, baseline_y));
 
-            // Rasterise the glyph and paint coverage samples.
             if let Some(outlined) = font.outline_glyph(glyph) {
-                let bounds = outlined.px_bounds();
-
-                // Glyph origin in canvas coordinates.
-                let gx = cursor_x + bounds.min.x;
-                let gy = rect.origin.y + (scaled_font.ascent() + bounds.min.y);
-
                 outlined.draw(|px, py, coverage| {
-                    let x = gx + px as f32;
-                    let y = gy + py as f32;
+                    let x = origin_x + px as f32;
+                    let y = baseline_y + py as f32;
 
                     if x >= 0.0 && y >= 0.0 && (x as u32) < canvas_w && (y as u32) < canvas_h {
                         let idx = (y as u32 * canvas_w + x as u32) as usize;
                         let dst = &mut pixels[idx];
 
-                        // Porter-Duff "over" compositing.
-                        // The .min(1.0) cap is critical: it ensures out_r <= out_a
-                        // (the premultiplied invariant), otherwise from_rgba()
-                        // returns None and the glyph pixel is silently dropped.
+                        // Porter-Duff "over" compositing with .min(1.0) to
+                        // preserve the premultiplied invariant (r <= a).
                         let src_a = sa * coverage;
                         let inv_src_a = 1.0 - src_a;
 
@@ -149,17 +154,34 @@ impl<M> Widget<M> for Label {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::core::UiArena;
     use crate::layout::compute_layout;
 
+    fn expected_width(text: &str, font_size: f32) -> f32 {
+        let font = fonts::default_font();
+        let scaled = font.as_scaled(fonts::scale(font_size));
+        text.chars()
+            .map(|c| scaled.h_advance(font.glyph_id(c)))
+            .sum()
+    }
+
+    fn expected_height(font_size: f32) -> f32 {
+        let font = fonts::default_font();
+        let scaled = font.as_scaled(fonts::scale(font_size));
+        scaled.height()
+    }
+
     #[test]
-    fn label_measure_matches_approximate_text_size() {
+    fn measure_matches_exact_glyph_metrics() {
         let mut arena = UiArena::<String>::new();
-        // "Hello" = 5 chars → 5 × 16 × 0.6 = 48.0 width, 16.0 height
-        let id = arena.spawn(Label::new("Hello"));
+        let id = arena.spawn(Label::new("Hello").font_size(16.0));
         arena.set_root(id);
 
         let state = compute_layout(
@@ -173,14 +195,15 @@ mod tests {
         );
         let rect = state.get(id).expect("label frame");
 
-        assert!((rect.size.width - 48.0).abs() < f32::EPSILON);
-        assert!((rect.size.height - 16.0).abs() < f32::EPSILON);
+        let ew = expected_width("Hello", 16.0);
+        let eh = expected_height(16.0);
+        assert!((rect.size.width - ew).abs() < 0.01, "width mismatch {ew}");
+        assert!((rect.size.height - eh).abs() < 0.01, "height mismatch {eh}");
     }
 
     #[test]
-    fn label_custom_font_size() {
+    fn measure_larger_font() {
         let mut arena = UiArena::<String>::new();
-        // "AB" = 2 chars, font_size 24 → 2 × 24 × 0.6 = 28.8 width, 24 height
         let id = arena.spawn(Label::new("AB").font_size(24.0));
         arena.set_root(id);
 
@@ -195,16 +218,19 @@ mod tests {
         );
         let rect = state.get(id).expect("label frame");
 
-        assert!((rect.size.width - 28.8).abs() < 0.01);
-        assert!((rect.size.height - 24.0).abs() < 0.01);
+        let ew = expected_width("AB", 24.0);
+        let eh = expected_height(24.0);
+        assert!((rect.size.width - ew).abs() < 0.01);
+        assert!((rect.size.height - eh).abs() < 0.01);
     }
 
     #[test]
-    fn label_respects_constraints() {
+    fn measure_respects_constraints() {
         let mut arena = UiArena::<String>::new();
-        let id = arena.spawn(Label::new("VeryLongText"));
+        let id = arena.spawn(Label::new("VeryLongText").font_size(16.0));
         arena.set_root(id);
 
+        // Constrain the width to 50 px.
         let state = compute_layout(
             &arena,
             id,
@@ -216,9 +242,9 @@ mod tests {
         );
         let rect = state.get(id).expect("label frame");
 
-        // Unconstrained width = 12 × 16 × 0.6 = 115.2, clamped to 50.0.
+        let ew = expected_width("VeryLongText", 16.0);
+        // The unconstrained width is larger than 50 → should be clamped.
+        assert!(ew > 50.0, "unconstrained width {ew} should be > 50");
         assert!((rect.size.width - 50.0).abs() < f32::EPSILON);
-        // Height = 16.0, which is < 50.0 so not clamped.
-        assert!((rect.size.height - 16.0).abs() < f32::EPSILON);
     }
 }
