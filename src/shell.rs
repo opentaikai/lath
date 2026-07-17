@@ -24,18 +24,35 @@ pub enum MouseButton {
 }
 
 /// Platform-agnostic window event translated from winit system events.
+///
+/// All coordinate values in [`ShellEvent`] are in **physical pixels**.
 #[derive(Debug, Clone, Copy)]
 pub enum ShellEvent {
-    /// The window surface should be redrawn.
-    Redraw,
-    /// The cursor moved to a new position.
+    /// The window surface should be redrawn.  The closure receives the
+    /// current `scale_factor` so the caller can compute layout in logical
+    /// points before drawing onto the physical-pixel canvas.
+    Redraw {
+        scale_factor: f32,
+    },
+    /// The cursor moved to a new position (physical pixels).
     CursorMoved { x: f64, y: f64 },
-    /// A mouse button was pressed at the given position.
+    /// A mouse button was pressed at the given position (physical pixels).
     MouseButtonPressed { x: f64, y: f64, button: MouseButton },
-    /// A mouse button was released at the given position.
+    /// A mouse button was released at the given position (physical pixels).
     MouseButtonReleased { x: f64, y: f64, button: MouseButton },
-    /// The window was resized to the given dimensions.
-    Resized { width: u32, height: u32 },
+    /// The window was resized (physical pixel dimensions) or the display
+    /// scale factor changed.  The `scale_factor` field lets the caller
+    /// derive logical size as `physical / scale_factor`.
+    Resized {
+        width: u32,
+        height: u32,
+        scale_factor: f32,
+    },
+    /// The display scale factor changed (e.g. window moved to a different
+    /// monitor).  The new `scale_factor` is provided for cache invalidation.
+    ScaleFactorChanged {
+        scale_factor: f32,
+    },
 }
 
 /// Abstracts the platform window, pixel buffer context, and event loop.
@@ -82,6 +99,7 @@ impl WindowShell {
             surface: None,
             rgba_buffer: Vec::new(),
             cursor_position: (0.0, 0.0),
+            scale_factor: 1.0,
             event_handler,
         };
 
@@ -103,6 +121,7 @@ struct ShellApp<F> {
     surface: Option<Surface<Arc<Window>, Arc<Window>>>,
     rgba_buffer: Vec<u8>,
     cursor_position: (f64, f64),
+    scale_factor: f32,
     event_handler: F,
 }
 
@@ -169,6 +188,10 @@ where
                 .create_window(attrs)
                 .expect("failed to create window"),
         );
+
+        // Query the initial scale factor from the display.
+        self.scale_factor = window.scale_factor() as f32;
+
         let context =
             Context::new(window.clone()).expect("failed to create softbuffer context");
         let mut surface =
@@ -204,6 +227,8 @@ where
 
             // ---- resize ---------------------------------------------------
             WindowEvent::Resized(size) => {
+                let old_scale = self.scale_factor;
+                self.scale_factor = window.scale_factor() as f32;
                 self.width = size.width;
                 self.height = size.height;
 
@@ -217,11 +242,28 @@ where
                 self.rgba_buffer
                     .resize((self.width * self.height * 4) as usize, 0);
 
+                // If the scale factor changed (e.g. window moved to a
+                // different monitor), emit a dedicated event so callers
+                // can invalidate caches.
+                if (self.scale_factor - old_scale).abs() > f32::EPSILON {
+                    Self::dispatch(
+                        &mut self.event_handler,
+                        ShellEvent::ScaleFactorChanged {
+                            scale_factor: self.scale_factor,
+                        },
+                        &mut self.rgba_buffer,
+                        self.width,
+                        self.height,
+                        window,
+                    );
+                }
+
                 Self::dispatch(
                     &mut self.event_handler,
                     ShellEvent::Resized {
                         width: self.width,
                         height: self.height,
+                        scale_factor: self.scale_factor,
                     },
                     &mut self.rgba_buffer,
                     self.width,
@@ -245,10 +287,13 @@ where
                     pixel[3] = 0xFF; // A
                 }
 
-                // Let the user draw on the canvas.
+                // Let the user draw on the canvas, passing the current
+                // scale factor so layout can be computed in logical points.
                 Self::dispatch(
                     &mut self.event_handler,
-                    ShellEvent::Redraw,
+                    ShellEvent::Redraw {
+                        scale_factor: self.scale_factor,
+                    },
                     &mut self.rgba_buffer,
                     self.width,
                     self.height,
