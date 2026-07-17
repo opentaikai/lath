@@ -162,6 +162,7 @@ mod tests {
                 width: 800.0,
                 height: 600.0,
             },
+            1.0,
         );
 
         let btn_rect = state.get(btn).expect("button should have a frame");
@@ -199,6 +200,7 @@ mod tests {
                 width: 800.0,
                 height: 600.0,
             },
+            1.0,
         );
 
         let rect = state.get(id).expect("label frame");
@@ -248,6 +250,7 @@ mod tests {
                 width: 800.0,
                 height: 600.0,
             },
+            1.0,
         );
 
         // Click inside the child's bounds.
@@ -289,6 +292,7 @@ mod tests {
                 width: 800.0,
                 height: 600.0,
             },
+            1.0,
         );
 
         // Click far away from the button.

@@ -161,7 +161,7 @@ mod tests {
         let root = arena.spawn(Container::<String>::new().padding(10.0).child(leaf));
         arena.set_root(root);
 
-        let state = compute_layout(&arena, root, Size { width: 800.0, height: 600.0 });
+        let state = compute_layout(&arena, root, Size { width: 800.0, height: 600.0 }, 1.0);
 
         let root_rect = state.get(root).expect("root frame");
         // 50 + 10*2 = 70, 30 + 10*2 = 50
@@ -178,7 +178,7 @@ mod tests {
         let root = arena.spawn(Container::<String>::new());
         arena.set_root(root);
 
-        let state = compute_layout(&arena, root, Size { width: 800.0, height: 600.0 });
+        let state = compute_layout(&arena, root, Size { width: 800.0, height: 600.0 }, 1.0);
         let root_rect = state.get(root).expect("root frame");
         assert_eq!(root_rect.size, Size { width: 0.0, height: 0.0 });
     }

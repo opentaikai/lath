@@ -92,16 +92,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return;
         };
 
-        // 3. Compute layout from the current window size.
-        let window_size = Size {
-            width: window.inner_size().width as f32,
-            height: window.inner_size().height as f32,
+        // 3. Compute layout once for this event.
+        //    The layout runs in logical points, then scales every rect
+        //    to physical pixels — the LayoutState is ready for draw and
+        //    hit-test alike.
+        let scale_factor = match event {
+            ShellEvent::Redraw { scale_factor } => scale_factor,
+            ShellEvent::Resized { scale_factor, .. } => scale_factor,
+            _ => 1.0, // fallback for other events
         };
-        let layout = compute_layout(&ui.arena, root, window_size);
+        let logical_size = Size {
+            width: window.inner_size().width as f32 / scale_factor,
+            height: window.inner_size().height as f32 / scale_factor,
+        };
+        let layout = compute_layout(&ui.arena, root, logical_size, scale_factor);
 
         // 4. React to the current event.
         match event {
             // Click → hit-test and dispatch to the topmost widget.
+            // Both click position (from the shell) and LayoutState rects
+            // are in physical pixels, so they compare directly.
             ShellEvent::MouseButtonPressed { x, y, .. } => {
                 dispatch_event(
                     &ui.arena,
@@ -116,7 +126,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             // Redraw → walk the tree and paint every widget.
-            ShellEvent::Redraw => {
+            ShellEvent::Redraw { .. } => {
                 ui.arena.traverse(root, |id, widget| {
                     if let Some(rect) = layout.get(id) {
                         widget.draw(pixmap, *rect);

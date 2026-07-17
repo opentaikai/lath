@@ -171,7 +171,7 @@ mod tests {
         let btn = arena.spawn(Button::<String>::new().padding(12.0).child(label));
         arena.set_root(btn);
 
-        let state = compute_layout(&arena, btn, Size { width: 800.0, height: 600.0 });
+        let state = compute_layout(&arena, btn, Size { width: 800.0, height: 600.0 }, 1.0);
 
         let btn_rect = state.get(btn).expect("button frame");
         // Label "OK" = 2 × 16 × 0.6 = 19.2, height 16.0

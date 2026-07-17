@@ -65,23 +65,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // mouse input, etc.).
     shell.run(move |event, pixmap, window| {
         // We only care about redraw events in this minimal example.
-        let ShellEvent::Redraw = event else { return };
+        let ShellEvent::Redraw { scale_factor } = event else { return };
 
         // --- Layout ---------------------------------------------------
-        // Compute the layout for the entire tree based on the current
-        // window dimensions.  This is a pure, deterministic function:
-        // it walks the tree bottom-up (measure) then top-down (arrange)
-        // and returns a `LayoutState` that maps each `WidgetId` to its
-        // final screen-space `Rect`.
-        let window_size = Size {
-            width: window.inner_size().width as f32,
-            height: window.inner_size().height as f32,
+        // Compute the layout in logical points, then scale to physical
+        // pixels for the canvas.
+        let logical_size = Size {
+            width: window.inner_size().width as f32 / scale_factor,
+            height: window.inner_size().height as f32 / scale_factor,
         };
-        let layout = compute_layout(&arena, root, window_size);
+        let layout = compute_layout(&arena, root, logical_size, scale_factor);
 
         // --- Draw -----------------------------------------------------
         // Walk the widget tree and call `draw` on each widget, passing
-        // the canvas and the widget's computed rect.
+        // the canvas and the widget's computed rect (physical pixels).
         arena.traverse(root, |id, widget| {
             if let Some(rect) = layout.get(id) {
                 widget.draw(pixmap, *rect);
