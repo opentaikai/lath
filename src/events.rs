@@ -49,9 +49,7 @@ fn hit_test_recursive<M>(
 
     // Check whether the click falls inside this widget's bounds.
     if let Some(rect) = layout.get(id) {
-        if point_in_rect(click_pos, rect)
-            && widget.handle_event(WidgetEvent::Click, event_ctx)
-        {
+        if point_in_rect(click_pos, rect) && widget.handle_event(WidgetEvent::Click, event_ctx) {
             return true;
         }
     }
@@ -141,7 +139,6 @@ mod tests {
         enum Msg {
             #[default]
             Clicked,
-            Other,
         }
 
         let mut ui = UiContext::<Msg>::new();
@@ -162,6 +159,7 @@ mod tests {
                 width: 800.0,
                 height: 600.0,
             },
+            1.0,
         );
 
         let btn_rect = state.get(btn).expect("button should have a frame");
@@ -199,6 +197,7 @@ mod tests {
                 width: 800.0,
                 height: 600.0,
             },
+            1.0,
         );
 
         let rect = state.get(id).expect("label frame");
@@ -232,7 +231,7 @@ mod tests {
                 .on_click(Msg::ChildClicked),
         );
 
-        let parent_label = ui.arena.spawn(Label::new("P"));
+        let _parent_label = ui.arena.spawn(Label::new("P"));
         let parent_btn = ui.arena.spawn(
             Button::new()
                 .padding(0.0)
@@ -248,6 +247,7 @@ mod tests {
                 width: 800.0,
                 height: 600.0,
             },
+            1.0,
         );
 
         // Click inside the child's bounds.
@@ -289,6 +289,7 @@ mod tests {
                 width: 800.0,
                 height: 600.0,
             },
+            1.0,
         );
 
         // Click far away from the button.

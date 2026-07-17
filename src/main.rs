@@ -5,7 +5,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let shell = WindowShell::new("Lath", 800, 600)?;
 
     shell.run(|event, pixmap, _window| match event {
-        ShellEvent::Redraw => {
+        ShellEvent::Redraw { .. } => {
             draw_centered_box(pixmap);
         }
         ShellEvent::CursorMoved { x, y } => {
@@ -17,8 +17,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ShellEvent::MouseButtonReleased { x, y, button } => {
             println!("released ({x:.0}, {y:.0}) {button:?}");
         }
-        ShellEvent::Resized { width, height } => {
+        ShellEvent::Resized { width, height, .. } => {
             println!("resized {width}x{height}");
+        }
+        ShellEvent::ScaleFactorChanged { scale_factor } => {
+            println!("scale factor changed to {scale_factor}");
         }
     })?;
 

@@ -150,21 +150,37 @@ impl<M> WidgetMeasure<M> for UiArena<M> {
 
 /// Computes the layout for the entire widget tree rooted at `root`.
 ///
+/// The solver runs entirely in **logical points** (the `window_logical_size`
+/// passed in), but every `Rect` in the returned [`LayoutState`] is scaled
+/// by `scale_factor` to **physical pixels**.  This ensures widget `draw()`
+/// calls receive coordinates that map 1:1 to the `tiny_skia::PixmapMut`
+/// buffer, while widget layout logic remains DPI-independent.
+///
+/// # Parameters
+///
+/// * `window_logical_size` – the window client area in logical points.
+///   This is typically `physical_size / scale_factor`.
+/// * `scale_factor` – the display's pixel density (e.g. 1.0, 1.5, 2.0).
+///
 /// # Algorithm
 ///
 /// 1. **Measure pass** – calls `root.measure()` with loose constraints
-///    derived from `window_size`.  Widgets may recursively measure their
-///    children through the arena to determine their own preferred size.
+///    derived from `window_logical_size`.  Widgets may recursively measure
+///    their children through the arena to determine their own preferred size.
 ///
 /// 2. **Arrange pass** – walks the tree top-down.  Each widget's `arrange`
 ///    method returns child offsets (local to the parent).  The solver
 ///    converts these to absolute screen-space coordinates, measures the
 ///    child to obtain its size, records the child's `Rect` in the
 ///    [`LayoutState`], and recurses.
+///
+/// 3. **Scale pass** – every rect is multiplied by `scale_factor` before
+///    being stored, converting logical coordinates to physical pixels.
 pub fn compute_layout<M>(
     arena: &UiArena<M>,
     root: WidgetId,
-    window_size: Size,
+    window_logical_size: Size,
+    scale_factor: f32,
 ) -> LayoutState {
     let mut state = LayoutState::new();
 
@@ -173,26 +189,52 @@ pub fn compute_layout<M>(
         None => return state,
     };
 
-    // Pass 1: measure root.
-    let constraints = Constraints::loose(window_size.width, window_size.height);
+    // Pass 1: measure root in logical space.
+    let constraints = Constraints::loose(window_logical_size.width, window_logical_size.height);
     let root_size = root_widget.measure(constraints, arena);
 
     let root_rect = Rect::new(Point::ZERO, root_size);
-    state.frames.insert(root, root_rect);
+    state
+        .frames
+        .insert(root, scale_rect(&root_rect, scale_factor));
 
-    // Pass 2: arrange recursively.
-    arrange_children(arena, root, root_size, Point::ZERO, &mut state);
+    // Pass 2: arrange recursively in logical space.
+    arrange_children(
+        arena,
+        root,
+        root_size,
+        Point::ZERO,
+        scale_factor,
+        &mut state,
+    );
 
     state
 }
 
+/// Scales a logical `Rect` to physical pixels by multiplying every
+/// component by `factor`.
+fn scale_rect(rect: &Rect, factor: f32) -> Rect {
+    Rect {
+        origin: Point {
+            x: rect.origin.x * factor,
+            y: rect.origin.y * factor,
+        },
+        size: Size {
+            width: rect.size.width * factor,
+            height: rect.size.height * factor,
+        },
+    }
+}
+
 /// Arranges the children of `parent_id`, converting local offsets to
-/// absolute coordinates and recording each child's `Rect`.
+/// absolute coordinates and recording each child's `Rect` (already
+/// scaled to physical pixels).
 fn arrange_children<M>(
     arena: &UiArena<M>,
     parent_id: WidgetId,
-    parent_size: Size,
-    parent_origin: Point,
+    parent_logical_size: Size,
+    parent_logical_origin: Point,
+    scale_factor: f32,
     state: &mut LayoutState,
 ) {
     let parent_widget = match arena.get(parent_id) {
@@ -200,7 +242,7 @@ fn arrange_children<M>(
         None => return,
     };
 
-    let local_offsets = parent_widget.arrange(parent_size, arena);
+    let local_offsets = parent_widget.arrange(parent_logical_size, arena);
 
     for (child_id, local_offset) in local_offsets {
         let child_widget = match arena.get(child_id) {
@@ -208,24 +250,34 @@ fn arrange_children<M>(
             None => continue,
         };
 
-        let absolute_x = parent_origin.x + local_offset.x;
-        let absolute_y = parent_origin.y + local_offset.y;
+        let logical_x = parent_logical_origin.x + local_offset.x;
+        let logical_y = parent_logical_origin.y + local_offset.y;
 
-        // Measure the child to discover its size.
-        let child_constraints = Constraints::loose(parent_size.width, parent_size.height);
-        let child_size = child_widget.measure(child_constraints, arena);
+        // Measure the child to discover its logical size.
+        let child_constraints =
+            Constraints::loose(parent_logical_size.width, parent_logical_size.height);
+        let child_logical_size = child_widget.measure(child_constraints, arena);
 
-        let child_rect = Rect::new(
+        let child_logical_rect = Rect::new(
             Point {
-                x: absolute_x,
-                y: absolute_y,
+                x: logical_x,
+                y: logical_y,
             },
-            child_size,
+            child_logical_size,
         );
-        state.frames.insert(child_id, child_rect);
+        state
+            .frames
+            .insert(child_id, scale_rect(&child_logical_rect, scale_factor));
 
-        // Recurse into the child's own children.
-        arrange_children(arena, child_id, child_size, child_rect.origin, state);
+        // Recurse into the child's own children (logical space).
+        arrange_children(
+            arena,
+            child_id,
+            child_logical_size,
+            child_logical_rect.origin,
+            scale_factor,
+            state,
+        );
     }
 }
 
@@ -250,10 +302,7 @@ mod tests {
         fn new(label: &'static str, width: f32, height: f32) -> Self {
             Self {
                 label,
-                intrinsic: Size {
-                    width,
-                    height,
-                },
+                intrinsic: Size { width, height },
             }
         }
     }
@@ -271,7 +320,11 @@ mod tests {
             constraints.constrain(self.intrinsic)
         }
 
-        fn arrange(&self, _size: Size, _arena: &dyn WidgetMeasure<String>) -> Vec<(WidgetId, Point)> {
+        fn arrange(
+            &self,
+            _size: Size,
+            _arena: &dyn WidgetMeasure<String>,
+        ) -> Vec<(WidgetId, Point)> {
             Vec::new()
         }
 
@@ -310,7 +363,8 @@ mod tests {
 
             for &child_id in &self.children {
                 if let Some(child) = arena.get_widget(child_id) {
-                    let child_constraints = Constraints::loose(constraints.max_width, f32::INFINITY);
+                    let child_constraints =
+                        Constraints::loose(constraints.max_width, f32::INFINITY);
                     let child_size = child.measure(child_constraints, arena);
                     total_height += child_size.height;
                     max_width = max_width.max(child_size.width);
@@ -323,7 +377,11 @@ mod tests {
             })
         }
 
-        fn arrange(&self, size: Size, _arena: &dyn WidgetMeasure<String>) -> Vec<(WidgetId, Point)> {
+        fn arrange(
+            &self,
+            size: Size,
+            _arena: &dyn WidgetMeasure<String>,
+        ) -> Vec<(WidgetId, Point)> {
             let mut offsets = Vec::new();
             let mut y: f32 = 0.0;
 
@@ -351,16 +409,36 @@ mod tests {
         arena.get_mut(root).unwrap().add_child(child);
         arena.set_root(root);
 
-        let state = compute_layout(&arena, root, Size { width: 800.0, height: 600.0 });
+        let state = compute_layout(
+            &arena,
+            root,
+            Size {
+                width: 800.0,
+                height: 600.0,
+            },
+            1.0,
+        );
 
         // Root wraps its child (VStack is a wrapping layout, not a filling one).
         let root_rect = state.get(root).expect("root should have a frame");
-        assert_eq!(root_rect.size, Size { width: 120.0, height: 80.0 });
+        assert_eq!(
+            root_rect.size,
+            Size {
+                width: 120.0,
+                height: 80.0
+            }
+        );
 
         // Child is placed at the top-left of the root with its intrinsic size.
         let child_rect = state.get(child).expect("child should have a frame");
         assert_eq!(child_rect.origin, Point { x: 0.0, y: 0.0 });
-        assert_eq!(child_rect.size, Size { width: 120.0, height: 80.0 });
+        assert_eq!(
+            child_rect.size,
+            Size {
+                width: 120.0,
+                height: 80.0
+            }
+        );
     }
 
     #[test]
@@ -384,7 +462,15 @@ mod tests {
         arena.get_mut(root).unwrap().add_child(b);
         arena.set_root(root);
 
-        let state = compute_layout(&arena, root, Size { width: 400.0, height: 300.0 });
+        let state = compute_layout(
+            &arena,
+            root,
+            Size {
+                width: 400.0,
+                height: 300.0,
+            },
+            1.0,
+        );
 
         // Root should exist.
         assert!(state.contains(root));
@@ -411,13 +497,25 @@ mod tests {
             width: 500.0,
             height: 500.0,
         };
-        assert_eq!(c.constrain(big), Size { width: 100.0, height: 100.0 });
+        assert_eq!(
+            c.constrain(big),
+            Size {
+                width: 100.0,
+                height: 100.0
+            }
+        );
 
         let small = Size {
             width: 10.0,
             height: 10.0,
         };
-        assert_eq!(c.constrain(small), Size { width: 10.0, height: 10.0 });
+        assert_eq!(
+            c.constrain(small),
+            Size {
+                width: 10.0,
+                height: 10.0
+            }
+        );
     }
 
     #[test]
@@ -427,7 +525,13 @@ mod tests {
             width: 999.0,
             height: 1.0,
         };
-        assert_eq!(c.constrain(any), Size { width: 200.0, height: 150.0 });
+        assert_eq!(
+            c.constrain(any),
+            Size {
+                width: 200.0,
+                height: 150.0
+            }
+        );
     }
 
     #[test]
