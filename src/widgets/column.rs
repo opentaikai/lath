@@ -71,8 +71,7 @@ impl<M> Widget<M> for Column {
             }
 
             if let Some(child) = arena.get_widget(child_id) {
-                let child_constraints =
-                    Constraints::loose(constraints.max_width, f32::INFINITY);
+                let child_constraints = Constraints::loose(constraints.max_width, f32::INFINITY);
                 let child_size = child.measure(child_constraints, arena);
                 total_height += child_size.height;
                 max_width = max_width.max(child_size.width);
@@ -102,10 +101,13 @@ impl<M> Widget<M> for Column {
                 .map(|c| c.measure(Constraints::loose(f32::INFINITY, f32::INFINITY), arena))
                 .unwrap_or(Size::ZERO);
 
-            offsets.push((child_id, Point {
-                x: 0.0,
-                y: current_y,
-            }));
+            offsets.push((
+                child_id,
+                Point {
+                    x: 0.0,
+                    y: current_y,
+                },
+            ));
 
             current_y += child_size.height;
         }
@@ -188,13 +190,7 @@ mod tests {
 
         let b_rect = state.get(b).expect("child b");
         // b starts at y = 30 (a's height) + 10 (spacing) = 40.
-        assert_eq!(
-            b_rect.origin,
-            Point {
-                x: 0.0,
-                y: 40.0
-            }
-        );
+        assert_eq!(b_rect.origin, Point { x: 0.0, y: 40.0 });
     }
 
     #[test]

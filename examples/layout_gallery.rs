@@ -80,7 +80,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Row: Save + Cancel side by side
-    let button_row = ui.arena
+    let button_row = ui
+        .arena
         .spawn(Row::new().spacing(8.0).child(save_btn).child(cancel_btn));
 
     // Leaf: action panel description
@@ -123,7 +124,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Row: body split-view
     let body = ui.arena.spawn(
-        Row::new().spacing(12.0).child(left_panel).child(right_panel),
+        Row::new()
+            .spacing(12.0)
+            .child(left_panel)
+            .child(right_panel),
     );
 
     // Leaf: header title
@@ -174,10 +178,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // 2. Compute layout for the current event.
         let scale_factor = match event {
-            ShellEvent::Redraw { scale_factor }
-            | ShellEvent::Resized {
-                scale_factor, ..
-            } => scale_factor,
+            ShellEvent::Redraw { scale_factor } | ShellEvent::Resized { scale_factor, .. } => {
+                scale_factor
+            }
             _ => 1.0,
         };
 
