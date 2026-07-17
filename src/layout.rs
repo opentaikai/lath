@@ -190,17 +190,23 @@ pub fn compute_layout<M>(
     };
 
     // Pass 1: measure root in logical space.
-    let constraints = Constraints::loose(
-        window_logical_size.width,
-        window_logical_size.height,
-    );
+    let constraints = Constraints::loose(window_logical_size.width, window_logical_size.height);
     let root_size = root_widget.measure(constraints, arena);
 
     let root_rect = Rect::new(Point::ZERO, root_size);
-    state.frames.insert(root, scale_rect(&root_rect, scale_factor));
+    state
+        .frames
+        .insert(root, scale_rect(&root_rect, scale_factor));
 
     // Pass 2: arrange recursively in logical space.
-    arrange_children(arena, root, root_size, Point::ZERO, scale_factor, &mut state);
+    arrange_children(
+        arena,
+        root,
+        root_size,
+        Point::ZERO,
+        scale_factor,
+        &mut state,
+    );
 
     state
 }
@@ -259,7 +265,9 @@ fn arrange_children<M>(
             },
             child_logical_size,
         );
-        state.frames.insert(child_id, scale_rect(&child_logical_rect, scale_factor));
+        state
+            .frames
+            .insert(child_id, scale_rect(&child_logical_rect, scale_factor));
 
         // Recurse into the child's own children (logical space).
         arrange_children(
@@ -294,10 +302,7 @@ mod tests {
         fn new(label: &'static str, width: f32, height: f32) -> Self {
             Self {
                 label,
-                intrinsic: Size {
-                    width,
-                    height,
-                },
+                intrinsic: Size { width, height },
             }
         }
     }
@@ -315,7 +320,11 @@ mod tests {
             constraints.constrain(self.intrinsic)
         }
 
-        fn arrange(&self, _size: Size, _arena: &dyn WidgetMeasure<String>) -> Vec<(WidgetId, Point)> {
+        fn arrange(
+            &self,
+            _size: Size,
+            _arena: &dyn WidgetMeasure<String>,
+        ) -> Vec<(WidgetId, Point)> {
             Vec::new()
         }
 
@@ -354,7 +363,8 @@ mod tests {
 
             for &child_id in &self.children {
                 if let Some(child) = arena.get_widget(child_id) {
-                    let child_constraints = Constraints::loose(constraints.max_width, f32::INFINITY);
+                    let child_constraints =
+                        Constraints::loose(constraints.max_width, f32::INFINITY);
                     let child_size = child.measure(child_constraints, arena);
                     total_height += child_size.height;
                     max_width = max_width.max(child_size.width);
@@ -367,7 +377,11 @@ mod tests {
             })
         }
 
-        fn arrange(&self, size: Size, _arena: &dyn WidgetMeasure<String>) -> Vec<(WidgetId, Point)> {
+        fn arrange(
+            &self,
+            size: Size,
+            _arena: &dyn WidgetMeasure<String>,
+        ) -> Vec<(WidgetId, Point)> {
             let mut offsets = Vec::new();
             let mut y: f32 = 0.0;
 
@@ -395,16 +409,36 @@ mod tests {
         arena.get_mut(root).unwrap().add_child(child);
         arena.set_root(root);
 
-        let state = compute_layout(&arena, root, Size { width: 800.0, height: 600.0 }, 1.0);
+        let state = compute_layout(
+            &arena,
+            root,
+            Size {
+                width: 800.0,
+                height: 600.0,
+            },
+            1.0,
+        );
 
         // Root wraps its child (VStack is a wrapping layout, not a filling one).
         let root_rect = state.get(root).expect("root should have a frame");
-        assert_eq!(root_rect.size, Size { width: 120.0, height: 80.0 });
+        assert_eq!(
+            root_rect.size,
+            Size {
+                width: 120.0,
+                height: 80.0
+            }
+        );
 
         // Child is placed at the top-left of the root with its intrinsic size.
         let child_rect = state.get(child).expect("child should have a frame");
         assert_eq!(child_rect.origin, Point { x: 0.0, y: 0.0 });
-        assert_eq!(child_rect.size, Size { width: 120.0, height: 80.0 });
+        assert_eq!(
+            child_rect.size,
+            Size {
+                width: 120.0,
+                height: 80.0
+            }
+        );
     }
 
     #[test]
@@ -428,7 +462,15 @@ mod tests {
         arena.get_mut(root).unwrap().add_child(b);
         arena.set_root(root);
 
-        let state = compute_layout(&arena, root, Size { width: 400.0, height: 300.0 }, 1.0);
+        let state = compute_layout(
+            &arena,
+            root,
+            Size {
+                width: 400.0,
+                height: 300.0,
+            },
+            1.0,
+        );
 
         // Root should exist.
         assert!(state.contains(root));
@@ -455,13 +497,25 @@ mod tests {
             width: 500.0,
             height: 500.0,
         };
-        assert_eq!(c.constrain(big), Size { width: 100.0, height: 100.0 });
+        assert_eq!(
+            c.constrain(big),
+            Size {
+                width: 100.0,
+                height: 100.0
+            }
+        );
 
         let small = Size {
             width: 10.0,
             height: 10.0,
         };
-        assert_eq!(c.constrain(small), Size { width: 10.0, height: 10.0 });
+        assert_eq!(
+            c.constrain(small),
+            Size {
+                width: 10.0,
+                height: 10.0
+            }
+        );
     }
 
     #[test]
@@ -471,7 +525,13 @@ mod tests {
             width: 999.0,
             height: 1.0,
         };
-        assert_eq!(c.constrain(any), Size { width: 200.0, height: 150.0 });
+        assert_eq!(
+            c.constrain(any),
+            Size {
+                width: 200.0,
+                height: 150.0
+            }
+        );
     }
 
     #[test]

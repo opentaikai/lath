@@ -117,11 +117,7 @@ impl<M> Widget<M> for Label {
                     let x = gx + px as f32;
                     let y = gy + py as f32;
 
-                    if x >= 0.0
-                        && y >= 0.0
-                        && (x as u32) < canvas_w
-                        && (y as u32) < canvas_h
-                    {
+                    if x >= 0.0 && y >= 0.0 && (x as u32) < canvas_w && (y as u32) < canvas_h {
                         let idx = (y as u32 * canvas_w + x as u32) as usize;
                         let dst = &mut pixels[idx];
 
@@ -132,18 +128,12 @@ impl<M> Widget<M> for Label {
                         let src_a = sa * coverage;
                         let inv_src_a = 1.0 - src_a;
 
-                        let out_r = (sr * coverage
-                            + dst.red() as f32 / 255.0 * inv_src_a)
-                            .min(1.0);
-                        let out_g = (sg * coverage
-                            + dst.green() as f32 / 255.0 * inv_src_a)
-                            .min(1.0);
-                        let out_b = (sb * coverage
-                            + dst.blue() as f32 / 255.0 * inv_src_a)
-                            .min(1.0);
-                        let out_a = (src_a
-                            + dst.alpha() as f32 / 255.0 * inv_src_a)
-                            .min(1.0);
+                        let out_r = (sr * coverage + dst.red() as f32 / 255.0 * inv_src_a).min(1.0);
+                        let out_g =
+                            (sg * coverage + dst.green() as f32 / 255.0 * inv_src_a).min(1.0);
+                        let out_b =
+                            (sb * coverage + dst.blue() as f32 / 255.0 * inv_src_a).min(1.0);
+                        let out_a = (src_a + dst.alpha() as f32 / 255.0 * inv_src_a).min(1.0);
 
                         let or = (out_r * 255.0) as u8;
                         let og = (out_g * 255.0) as u8;
@@ -172,7 +162,15 @@ mod tests {
         let id = arena.spawn(Label::new("Hello"));
         arena.set_root(id);
 
-        let state = compute_layout(&arena, id, Size { width: 800.0, height: 600.0 }, 1.0);
+        let state = compute_layout(
+            &arena,
+            id,
+            Size {
+                width: 800.0,
+                height: 600.0,
+            },
+            1.0,
+        );
         let rect = state.get(id).expect("label frame");
 
         assert!((rect.size.width - 48.0).abs() < f32::EPSILON);
@@ -186,7 +184,15 @@ mod tests {
         let id = arena.spawn(Label::new("AB").font_size(24.0));
         arena.set_root(id);
 
-        let state = compute_layout(&arena, id, Size { width: 800.0, height: 600.0 }, 1.0);
+        let state = compute_layout(
+            &arena,
+            id,
+            Size {
+                width: 800.0,
+                height: 600.0,
+            },
+            1.0,
+        );
         let rect = state.get(id).expect("label frame");
 
         assert!((rect.size.width - 28.8).abs() < 0.01);
@@ -199,7 +205,15 @@ mod tests {
         let id = arena.spawn(Label::new("VeryLongText"));
         arena.set_root(id);
 
-        let state = compute_layout(&arena, id, Size { width: 50.0, height: 50.0 }, 1.0);
+        let state = compute_layout(
+            &arena,
+            id,
+            Size {
+                width: 50.0,
+                height: 50.0,
+            },
+            1.0,
+        );
         let rect = state.get(id).expect("label frame");
 
         // Unconstrained width = 12 × 16 × 0.6 = 115.2, clamped to 50.0.

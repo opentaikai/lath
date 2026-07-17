@@ -98,10 +98,13 @@ impl<M> Widget<M> for Container<M> {
 
     fn arrange(&self, _size: Size, _arena: &dyn WidgetMeasure<M>) -> Vec<(WidgetId, Point)> {
         match self.child {
-            Some(id) => vec![(id, Point {
-                x: self.padding,
-                y: self.padding,
-            })],
+            Some(id) => vec![(
+                id,
+                Point {
+                    x: self.padding,
+                    y: self.padding,
+                },
+            )],
             None => Vec::new(),
         }
     }
@@ -161,15 +164,35 @@ mod tests {
         let root = arena.spawn(Container::<String>::new().padding(10.0).child(leaf));
         arena.set_root(root);
 
-        let state = compute_layout(&arena, root, Size { width: 800.0, height: 600.0 }, 1.0);
+        let state = compute_layout(
+            &arena,
+            root,
+            Size {
+                width: 800.0,
+                height: 600.0,
+            },
+            1.0,
+        );
 
         let root_rect = state.get(root).expect("root frame");
         // 50 + 10*2 = 70, 30 + 10*2 = 50
-        assert_eq!(root_rect.size, Size { width: 70.0, height: 50.0 });
+        assert_eq!(
+            root_rect.size,
+            Size {
+                width: 70.0,
+                height: 50.0
+            }
+        );
 
         let leaf_rect = state.get(leaf).expect("leaf frame");
         assert_eq!(leaf_rect.origin, Point { x: 10.0, y: 10.0 });
-        assert_eq!(leaf_rect.size, Size { width: 50.0, height: 30.0 });
+        assert_eq!(
+            leaf_rect.size,
+            Size {
+                width: 50.0,
+                height: 30.0
+            }
+        );
     }
 
     #[test]
@@ -178,8 +201,22 @@ mod tests {
         let root = arena.spawn(Container::<String>::new());
         arena.set_root(root);
 
-        let state = compute_layout(&arena, root, Size { width: 800.0, height: 600.0 }, 1.0);
+        let state = compute_layout(
+            &arena,
+            root,
+            Size {
+                width: 800.0,
+                height: 600.0,
+            },
+            1.0,
+        );
         let root_rect = state.get(root).expect("root frame");
-        assert_eq!(root_rect.size, Size { width: 0.0, height: 0.0 });
+        assert_eq!(
+            root_rect.size,
+            Size {
+                width: 0.0,
+                height: 0.0
+            }
+        );
     }
 }

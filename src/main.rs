@@ -17,11 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ShellEvent::MouseButtonReleased { x, y, button } => {
             println!("released ({x:.0}, {y:.0}) {button:?}");
         }
-        ShellEvent::Resized {
-            width,
-            height,
-            ..
-        } => {
+        ShellEvent::Resized { width, height, .. } => {
             println!("resized {width}x{height}");
         }
         ShellEvent::ScaleFactorChanged { scale_factor } => {

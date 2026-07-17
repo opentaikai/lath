@@ -31,9 +31,7 @@ pub enum ShellEvent {
     /// The window surface should be redrawn.  The closure receives the
     /// current `scale_factor` so the caller can compute layout in logical
     /// points before drawing onto the physical-pixel canvas.
-    Redraw {
-        scale_factor: f32,
-    },
+    Redraw { scale_factor: f32 },
     /// The cursor moved to a new position (physical pixels).
     CursorMoved { x: f64, y: f64 },
     /// A mouse button was pressed at the given position (physical pixels).
@@ -50,9 +48,7 @@ pub enum ShellEvent {
     },
     /// The display scale factor changed (e.g. window moved to a different
     /// monitor).  The new `scale_factor` is provided for cache invalidation.
-    ScaleFactorChanged {
-        scale_factor: f32,
-    },
+    ScaleFactorChanged { scale_factor: f32 },
 }
 
 /// Abstracts the platform window, pixel buffer context, and event loop.
@@ -67,11 +63,7 @@ pub struct WindowShell {
 
 impl WindowShell {
     /// Creates a new window shell with the given title and dimensions.
-    pub fn new(
-        title: &str,
-        width: u32,
-        height: u32,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(title: &str, width: u32, height: u32) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
             title: title.to_string(),
             width,
@@ -144,10 +136,7 @@ impl<F> ShellApp<F> {
 
     /// Converts the RGBA pixel buffer to softbuffer's native u32 format
     /// and presents the frame to the display.
-    fn present_frame(
-        surface: &mut Surface<Arc<Window>, Arc<Window>>,
-        rgba_buffer: &[u8],
-    ) {
+    fn present_frame(surface: &mut Surface<Arc<Window>, Arc<Window>>, rgba_buffer: &[u8]) {
         let Ok(mut buffer) = surface.buffer_mut() else {
             return;
         };
@@ -192,8 +181,7 @@ where
         // Query the initial scale factor from the display.
         self.scale_factor = window.scale_factor() as f32;
 
-        let context =
-            Context::new(window.clone()).expect("failed to create softbuffer context");
+        let context = Context::new(window.clone()).expect("failed to create softbuffer context");
         let mut surface =
             Surface::new(&context, window.clone()).expect("failed to create softbuffer surface");
         surface

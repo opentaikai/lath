@@ -65,7 +65,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // mouse input, etc.).
     shell.run(move |event, pixmap, window| {
         // We only care about redraw events in this minimal example.
-        let ShellEvent::Redraw { scale_factor } = event else { return };
+        let ShellEvent::Redraw { scale_factor } = event else {
+            return;
+        };
 
         // --- Layout ---------------------------------------------------
         // Compute the layout in logical points, then scale to physical
